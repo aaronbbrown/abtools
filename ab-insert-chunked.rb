@@ -8,7 +8,7 @@ require 'benchmark'
 
 class Hash
   def merge_keys ( keys )
-    Hash[self.select { |k,v| keys.include? k }]
+    Hash[*self.select { |k,v| keys.include? k }.flatten]
   end
 end
 
