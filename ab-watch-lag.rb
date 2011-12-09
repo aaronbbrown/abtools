@@ -22,7 +22,7 @@ end
 
 class Integer
   def lpad(num,padstr="0")
-    self.to_s.ljust(num, padstr)
+    self.to_s.rjust(num, padstr)
   end
 end
 
