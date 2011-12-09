@@ -27,10 +27,10 @@ class Integer
 end
 
 def sec_to_hms(secs)
-  h = (secs/60/60).lpad(2)
-  m = (secs/60 % 60).lpad(2)
-  s = (secs % 60).lpad(2)
-  [h,m,s].join(":")
+  h = (secs/60/60)
+  m = (secs/60 % 60)
+  s = (secs % 60)
+  [h,m,s].map{ |x| x.lpad(2) }.join(":")
 end
 
 opts = OptionParser.new
