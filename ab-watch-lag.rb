@@ -43,7 +43,7 @@ opts.on("-P", "--port PORT",     Integer,
     "MySQL port (default #{options[:port]})" )      { |v| options[:port] = v }
 opts.on("-s", "--socket SOCKET", Integer, "MySQL socket" )                      { |v| options[:socket] = v }
 opts.on("-i", "--interval SECONDS", Integer, 
-    "Sleep interval between messages (default #{options[:interval]}s)" ) { |v| options[:socket] = v }
+    "Sleep interval between messages (default #{options[:interval]}s)" ) { |v| options[:interval] = v }
 opts.on("-t", "--table TABLE", String, 
     "Heartbeat database.table (must have a timestamp column named ts)") { |v| options[:table] = v }
 opts.parse!
