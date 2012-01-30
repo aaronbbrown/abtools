@@ -1,0 +1,51 @@
+#!/usr/bin/env ruby
+
+require 'optparse'
+require 'pp'
+require 'rubygems'
+require 'sequel'
+
+module ABTools
+  def initialize ( h )
+    @interval  = h[:interval] || 600
+    @period    = h[:period]   || 30
+    @randomize = !!h[:randomize]
+
+    params = h.merge_keys([:host,:user,:password,:port,:socket])
+    @sequel = Sequel.mysql(params)
+  end
+
+  def slow_log_values
+    query = "SELECT * FROM INFORMATION_SCHEMA.GLOBAL_VARIABLES WHERE VARIABLE_NAME IN ('SLOW_QUERY_LOG','SLOW_QUERY_LOG_FILE','LOG_SLOW_QUERIES','SLOW_QUERY_LOG','LONG_QUERY_TIME')"
+    ds = @sequel[query]
+    ds.to_hash(:VARIABLE_NAME,:VARIABLE_VALUE)
+  end
+end
+
+options = { :host       => "localhost",
+            :user       => nil,
+            :password   => nil,
+            :port       => 3306,
+            :socket     => nil,
+            :interval   => 600,    # sample every :interval seconds
+            :period     => 30,     # sample every :period seconds every :interval seconds
+            :randomize  => true,   # randomize the :interval time
+           }
+
+opts = OptionParser.new
+opts.banner = "Usage #{$0} [OPTIONS]"
+opts.on("-u", "--user USER", String,  "MySQL User" )  do |v|
+  options[:user] = v 
+end
+opts.on("-p", "--password PASSWORD", String,  "MySQL Password" )  do |v| 
+  options[:password] = v 
+end
+opts.on("-P", "--port PORT", Integer, "MySQL port (default #{options[:port]})" )  do |v|
+  options[:port] = v 
+end
+opts.on("-H", "--host HOST", String,  "MySQL hostname (default: #{options[:host]})" )  do |v|
+  options[:host] = v 
+end
+opts.on("-h", "--help",  "this message") { puts opts; exit 1}
+
+opts.parse!
