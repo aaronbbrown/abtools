@@ -41,7 +41,7 @@ opts.on("-H", "--host HOST",     String,
     "MySQL hostname (default: #{options[:host]})" ) { |v| options[:host] = v }
 opts.on("-P", "--port PORT",     Integer, 
     "MySQL port (default #{options[:port]})" )      { |v| options[:port] = v }
-opts.on("-s", "--socket SOCKET", Integer, "MySQL socket" )                      { |v| options[:socket] = v }
+opts.on("-s", "--socket SOCKET", String, "MySQL socket" )                      { |v| options[:socket] = v }
 opts.on("-i", "--interval SECONDS", Integer, 
     "Sleep interval between messages (default #{options[:interval]}s)" ) { |v| options[:interval] = v }
 opts.on("-t", "--table TABLE", String, 
