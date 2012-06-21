@@ -79,6 +79,12 @@ SQL
   sequel[query].all
 end
 
+def copy_tables (sequel, tables, source_db, destination_db)
+  tables.each do |table|
+    copy_table(sequel, table, source_db, destination_db)
+  end
+end
+
 def get_view_def ( sequel, view, db )
   query = "SHOW CREATE VIEW #{quote_table(db,view)}"
   sequel[query].first
@@ -101,7 +107,8 @@ end
 options = { :dsn             => nil,
             :source_db       => nil,
             :destination_db  => nil,
-            :local           => nil,
+            :local           => false,
+            :threads         => 1,
           }
 
 opts = OptionParser.new
@@ -117,6 +124,9 @@ opts.on("--destination-db DATABASE", String, "Destination database") do |v|
 end
 opts.on("-l", "--local", "Don't log to binary log") do |v|
   options[:local] = v
+end
+opts.on("-t", "--threads THREADS", Integer, "Number of threads to use for copy (default: #{options[:threads]})") do |v|
+  options[:threads] = v
 end
 opts.on("-h", "--help", "This message") { puts opts; exit 1 }
 opts.parse!
@@ -138,23 +148,50 @@ end
 logger = Logger.new(STDOUT)
 logger.level = Logger::DEBUG
 
-sequel = Sequel.mysql( options[:dsn]['d'], {
+sequel_opts = {
+    :database => options[:dsn]['d'],
+    :adapter  => 'mysql2',
     :host     => options[:dsn]['h'] || 'localhost',
     :user     => options[:dsn]['u'],
     :password => options[:dsn]['p'],
     :port     => options[:dsn]['P'] || 3306,
-    :socket   => options[:dsn]['s']
-    } )
-sequel.loggers << logger
+    :socket   => options[:dsn]['s'],
+    :logger   => logger,
+}
+sequel_opts[:max_connections] = options[:threads]
+sequel_opts[:single_threaded] = (options[:threads] <= 1)
 
+
+sequel = Sequel.connect( sequel_opts )
 if options[:local]
-  sequel["SET SQL_LOG_BIN=0"].update
+  sequel.pool.after_connect = proc do |conn| 
+    query = "SET SQL_LOG_BIN=0"
+    logger.info query
+    conn.query(query)
+  end
 end
+
 
 create_db(sequel, options[:source_db], options[:destination_db]) 
 tables = get_tables(sequel, options[:source_db])
-tables.each do |table|
-  copy_table(sequel, table, options[:source_db], options[:destination_db])
+
+if options[:threads] > 1
+  threads = []
+  # don't create more threads than tables
+  thread_count = [tables.size, options[:threads]].min
+  table_groups = tables.each_slice(tables.size/thread_count).to_a
+  pp table_groups
+  table_groups.each do |tg|
+    threads << Thread.new(sequel,tg,options) do |t_sequel,t_tg,t_options|
+      copy_tables(t_sequel, t_tg, t_options[:source_db], t_options[:destination_db]) 
+    end
+  end
+  threads.each do |thread| 
+    thread.abort_on_exception = true
+    thread.join 
+  end
+else
+  copy_tables(sequel, tg, options[:source_db], options[:destination_db]) 
 end
 
 views = get_views(sequel, options[:source_db])
