@@ -1,13 +1,14 @@
 #!/usr/bin/env ruby
 
-require 'rubygems'
 require 'pp'
-require 'graphite/logger'
-require 'sequel'
 require 'lib/string'
 require 'lib/defaults'
 require 'logger'
 require 'optparse'
+
+require 'rubygems'
+require 'graphite/logger' # gem install graphite
+require 'sequel'          # gem install sequel
 
 options = { :prefix => 'mysql' }
 
@@ -22,8 +23,14 @@ end
 opts.on("-p", "--prefix PREFIX", String, "Key prefix (default #{options[:prefix]})") do |v|
   options[:prefix] = v
 end
+opts.on("-h", "--help", "This message") { puts opts; exit 1 }
 opts.parse!
 
+unless options[:dsn] && options[:graphite]
+  STDERR.puts "You must specify a --dsn and --graphite"
+  puts opts
+  exit 1
+end
 
 logger = Logger.new(STDOUT)
 logger.level = Logger::DEBUG
