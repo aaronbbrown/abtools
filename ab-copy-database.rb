@@ -154,9 +154,11 @@ sequel_opts = {
     :host     => options[:dsn]['h'] || 'localhost',
     :user     => options[:dsn]['u'],
     :password => options[:dsn]['p'],
-    :port     => options[:dsn]['P'] || 3306,
+    :port     => options[:dsn]['P'].to_i || 3306,
     :socket   => options[:dsn]['s'],
     :logger   => logger,
+    :pool_timeout => 30,
+    :pool_sleep_time => 0.1,
 }
 sequel_opts[:max_connections] = options[:threads]
 sequel_opts[:single_threaded] = (options[:threads] <= 1)
