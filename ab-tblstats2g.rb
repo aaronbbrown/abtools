@@ -11,6 +11,16 @@ require 'rubygems'
 require 'graphite/logger' # gem install graphite
 require 'sequel'          # gem install sequel
 
+def parse_dsn ( dsn )
+  dsn_h = dsn.to_h
+  { :user     => dsn_h['u'],
+    :password => dsn_h['p'],
+    :host     => dsn_h['h'],
+    :socket   => dsn_h['s'],
+    :port     => dsn_h['P'],
+  }
+end
+
 options = { :server_type => 'mysql' }
 
 opts = OptionParser.new
@@ -20,7 +30,7 @@ opts.on("-s", "--server-type TYPE", String,
   options[:server_type] = v
 end
 opts.on("-d", "--dsn DSN", String, "Connection DSN") do |v|
-  options[:dsn] = v.to_h
+  options.merge! parse_dsn(v)
 end
 opts.on("-g", "--graphite HOST", String, "Graphite (carbon) host:port") do |v|
   options[:graphite] = v
@@ -28,11 +38,14 @@ end
 opts.on("-p", "--prefix PREFIX", String, "Key prefix (defaults to server-type)" ) do |v|
   options[:prefix] = v
 end
+opts.on("--defaults-file FILE", String, "MySQL style defaults file (ini format)") do |v|
+  options.merge! ABTools.read_my_cnf(v)
+end
 opts.on("-h", "--help", "This message") { puts opts; exit 1 }
 opts.parse!
 
-unless options[:dsn] && options[:graphite]
-  STDERR.puts "You must specify a --dsn and --graphite"
+unless options[:graphite]
+  STDERR.puts "You must specify --graphite"
   puts opts
   exit 1
 end

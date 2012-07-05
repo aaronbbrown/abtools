@@ -1,9 +1,10 @@
 module ABTools
-  def read_defaults_file ( mysql_opts, ini )
+  def self.read_my_cnf ( filename )
     h = {}
+    ini = IniFile.new(filename)
     h[:host]     ||= ini['client']['host']
     h[:user]     ||= ini['client']['user']
-    h[:password] ||= ini['client']['pass']
+    h[:password] ||= ini['client']['password']
     h[:port]     ||= ini['client']['port']
     h[:socket]   ||= ini['client']['socket']
     h

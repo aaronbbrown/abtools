@@ -34,11 +34,11 @@ module ABTableStats
       sequel_opts = {
         :database => h[:database],
         :adapter  => h[:adapter],
-        :host     => h[:dsn]['h']      || 'localhost',
-        :socket   => h[:dsn]['S'],
-        :user     => h[:dsn]['u'], 
-        :password => h[:dsn]['p'],
-        :port     => h[:dsn]['P'].to_i,
+        :host     => h[:host]      || 'localhost',
+        :socket   => h[:socket],
+        :user     => h[:user],
+        :password => h[:password],
+        :port     => h[:port],
         :logger   => h[:logger]
       }
       @conn = Sequel.connect(sequel_opts)
