@@ -87,11 +87,13 @@ SQL
       super h
     end
 
-    def get_database_stats
-      @conn['SELECT DB_NAME(database_id) as db_name, (size*8) as size_kb FROM sys.master_files'].all
+    # return some stats about the database itself
+    def db_stats
+      sizes = @conn['SELECT DB_NAME(database_id) as [name], (size*8) as [size_kb] FROM sys.master_files'].to_hash(:name,:size_kb)
+      stats = Hash[sizes.map { |x| ["#{@prefix}.#{x[0]}.used_bytes",x[1]*1024] }]
     end
 
-    def get_databases
+    def databases
       ignore_schemas = %w[tempdb master]
       @conn['SELECT name FROM sys.databases WHERE name NOT IN ?', ignore_schemas].map { |x| x[:name] }
     end
@@ -118,10 +120,10 @@ SQL
 
     def stats
       stats = {}
-      get_databases.each do |db|
+      databases.each do |db|
         stats.merge! stats_for_db(db)
       end
-      stats
+      stats.merge db_stats
     end
   end
 end
