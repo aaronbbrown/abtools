@@ -127,9 +127,8 @@ SQL
 
     def get_table_stats
       stats = {}
-      dbs = get_databases
-      dbs[0..2].each do |db|
-        stats.merge!(get_table_stats_for_db(db))
+      get_databases.each do |db|
+        stats.merge! get_table_stats_for_db(db)
       end
       stats
     end
@@ -176,5 +175,4 @@ conn = abts.conn
 graphite = Graphite::Logger.new(options[:graphite])
 graphite.logger = logger
 stats = abts.get_table_stats
-pp stats
 graphite.log(Time.now, stats)
