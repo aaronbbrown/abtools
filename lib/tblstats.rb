@@ -87,18 +87,95 @@ SQL
       super h
     end
 
+    def common_size_stats ( key_prefix, row )
+      { "#{key_prefix}.reserved_bytes" => to_bytes(row[:reserved]), 
+        "#{key_prefix}.data_bytes"     => to_bytes(row[:data]),
+        "#{key_prefix}.index_bytes"    => to_bytes(row[:index_size]),
+        "#{key_prefix}.unused_bytes"   => to_bytes(row[:unused]),
+      }
+    end
+
+    # this is hacked from the built-in sp_spaceused function which
+    # returns multiple resultsets and is incompatible with
+    # pretty much every ruby library in existence.
+    def spaceused
+       sql = <<SQL
+select sum(convert(bigint,case when status & 64 = 0 then size else 0 end)) AS dbsize,
+       sum(convert(bigint,case when status & 64 <> 0 then size else 0 end)) AS logsize
+from dbo.sysfiles
+SQL
+      rs = @conn[sql].first
+      dbsize  = rs[:dbsize]
+      logsize = rs[:logsize]
+
+      sql = <<SQL
+select sum(a.total_pages) AS reservedpages,
+       sum(a.used_pages) AS usedpages,
+       sum(
+        CASE
+          -- XML-Index and FT-Index-Docid is not considered "data", but is part of "index_size"
+          When it.internal_type IN (202,204) Then 0
+          When a.type <> 1 Then a.used_pages
+          When p.index_id < 2 Then a.data_pages
+          Else 0
+        END
+      ) AS pages
+from sys.partitions p join sys.allocation_units a on p.partition_id = a.container_id
+left join sys.internal_tables it on p.object_id = it.object_id
+SQL
+      rs = @conn[sql].first
+      reservedpages = rs[:reservedpages]
+      usedpages     = rs[:usedpages]
+      pages         = rs[:pages]
+
+      sql = <<SQL
+select database_name = db_name(),
+       database_size = ltrim(str((convert (dec (15,2),?) + convert (dec (15,2),?))
+      * 8192 / 1048576,15,2) + ' MB'),
+    'unallocated space' = ltrim(str((case when ? >= ? then
+      (convert (dec (15,2),?) - convert (dec (15,2),?))
+      * 8192 / 1048576 else 0 end),15,2) + ' MB')
+SQL
+      rs = @conn[sql,dbsize,logsize,dbsize,reservedpages,dbsize,reservedpages].first
+      stats = { :database_name => rs[:database_name],
+                :database_size => rs[:database_size] }
+
+      sql = <<SQL
+select
+    reserved = ltrim(str(? * 8192 / 1024.,15,0) + ' KB'),
+    data = ltrim(str(? * 8192 / 1024.,15,0) + ' KB'),
+    index_size = ltrim(str((? - ?) * 8192 / 1024.,15,0) + ' KB'),
+    unused = ltrim(str((? - ?) * 8192 / 1024.,15,0) + ' KB')
+SQL
+      rs = @conn[sql,reservedpages,pages,usedpages,pages,reservedpages,usedpages].first
+      stats.merge( :reserved   => rs[:reserved],
+                   :data       => rs[:data],
+                   :index_size => rs[:index_size],
+                   :unused     => rs[:unused] )
+    end
+
     # return some stats about the database itself
-    def db_stats
-      sizes = @conn['SELECT DB_NAME(database_id) as [name], (size*8) as [size_kb] FROM sys.master_files'].to_hash(:name,:size_kb)
-      stats = Hash[sizes.map { |x| ["#{@prefix}.#{x[0]}.used_bytes",x[1]*1024] }]
+    def db_stats(db)
+      stats = {}
+      @conn.execute("USE [#{db}]")
+      row = spaceused
+      key_prefix = [ @prefix, row[:database_name] ].compact.join('.')
+
+      stats["#{key_prefix}.database_size_bytes"] = to_bytes(row[:database_size_bytes])
+      stats.merge common_size_stats(key_prefix,row)
     end
 
-    def databases
-      ignore_schemas = %w[tempdb master]
-      @conn['SELECT name FROM sys.databases WHERE name NOT IN ?', ignore_schemas].map { |x| x[:name] }
+    def databases ( exclude_dbs = [])
+      base_query = 'SELECT name FROM sys.databases'
+      if exclude_dbs.empty?
+        ds = @conn[base_query]
+      else
+        ds = @conn["#{base_query} WHERE name NOT IN ?", exclude_dbs]
+      end
+      ds.map { |x| x[:name] }
     end
 
-    def stats_for_db ( db )
+    def tbl_stats_for_db ( db )
       stats = {}
       begin
         @conn.execute("USE [#{db}]")
@@ -106,12 +183,9 @@ SQL
         space_used.each do |row|
           key_prefix = [ @prefix, db,
                          row[:name] ].compact.join('.')
-
-          stats["#{key_prefix}.data_bytes"]   = to_bytes(row[:data])
-          stats["#{key_prefix}.index_bytes"]  = to_bytes(row[:index_size])
-          stats["#{key_prefix}.unused_bytes"] = to_bytes(row[:unused])
-          stats["#{key_prefix}.total_bytes"]  = to_bytes(row[:data]) + to_bytes(row[:index_size])
-          stats["#{key_prefix}.rows"]         = row[:rows].to_i || 0
+          stats["#{key_prefix}.total_bytes"]    = to_bytes(row[:data]) + to_bytes(row[:index_size])
+          stats["#{key_prefix}.rows"]           = row[:rows].to_i || 0
+          stats.merge!(common_size_stats(key_prefix,row))
         end
       rescue
       end
@@ -120,11 +194,13 @@ SQL
 
     def stats
       stats = {}
-      databases.each do |db|
-        stats.merge! stats_for_db(db)
-      end
-      stats.merge db_stats
-    end
+      exclude_dbs = %w[tempdb master]
+#      databases(exclude_dbs).each do |db| 
+#        stats.merge! tbl_stats_for_db(db) 
+#      end
+      databases(%w[master model msdb]).each { |db| stats.merge! db_stats(db) }
+      pp stats
+     end
   end
 end
 
