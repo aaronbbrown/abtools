@@ -88,11 +88,12 @@ SQL
     end
 
     def common_size_stats ( key_prefix, row )
-      { "#{key_prefix}.reserved_bytes" => to_bytes(row[:reserved]), 
-        "#{key_prefix}.data_bytes"     => to_bytes(row[:data]),
-        "#{key_prefix}.index_bytes"    => to_bytes(row[:index_size]),
-        "#{key_prefix}.unused_bytes"   => to_bytes(row[:unused]),
-      }
+      stats = {}
+      stats["#{key_prefix}.reserved_bytes"] = to_bytes(row[:reserved])   unless row[:reserved].to_i   == 0
+      stats["#{key_prefix}.data_bytes"]     = to_bytes(row[:data])       unless row[:data].to_i       == 0
+      stats["#{key_prefix}.index_bytes"]    = to_bytes(row[:index_size]) unless row[:index_size].to_i == 0
+      stats["#{key_prefix}.unused_bytes"]   = to_bytes(row[:unused])     unless row[:unused].to_i     == 0
+      stats
     end
 
     # this is hacked from the built-in sp_spaceused function which
@@ -161,7 +162,7 @@ SQL
       row = spaceused
       key_prefix = [ @prefix, row[:database_name] ].compact.join('.')
 
-      stats["#{key_prefix}.database_size_bytes"] = to_bytes(row[:database_size_bytes])
+      stats["#{key_prefix}.database_size_bytes"] = to_bytes(row[:database_size_bytes]) unless row[:database_size_bytes].to_i == 0
       stats.merge common_size_stats(key_prefix,row)
     end
 
@@ -184,7 +185,7 @@ SQL
           key_prefix = [ @prefix, db,
                          row[:name] ].compact.join('.')
           stats["#{key_prefix}.total_bytes"]    = to_bytes(row[:data]) + to_bytes(row[:index_size])
-          stats["#{key_prefix}.rows"]           = row[:rows].to_i || 0
+          stats["#{key_prefix}.rows"]           = row[:rows].to_i unless row[:rows].to_i == 0
           stats.merge!(common_size_stats(key_prefix,row))
         end
       rescue
@@ -195,12 +196,12 @@ SQL
     def stats
       stats = {}
       exclude_dbs = %w[tempdb master]
-#      databases(exclude_dbs).each do |db| 
-#        stats.merge! tbl_stats_for_db(db) 
-#      end
+      databases(exclude_dbs).each do |db| 
+        stats.merge! tbl_stats_for_db(db) 
+      end
       databases(%w[master model msdb]).each { |db| stats.merge! db_stats(db) }
-      pp stats
-     end
+      stats
+    end
   end
 end
 
