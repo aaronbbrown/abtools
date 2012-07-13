@@ -9,6 +9,7 @@ module ABTools
   def initialize ( h )
     @interval  = h[:interval] || 600
     @period    = h[:period]   || 30
+    @logfile   = h[:logfile]  || "/tmp/all_queries.log"
     @randomize = !!h[:randomize]
 
     params = h.merge_keys([:host,:user,:password,:port,:socket])
@@ -16,9 +17,38 @@ module ABTools
   end
 
   def slow_log_values
-    query = "SELECT * FROM INFORMATION_SCHEMA.GLOBAL_VARIABLES WHERE VARIABLE_NAME IN ('SLOW_QUERY_LOG','SLOW_QUERY_LOG_FILE','LOG_SLOW_QUERIES','SLOW_QUERY_LOG','LONG_QUERY_TIME')"
+    query = <<EOS
+SELECT * FROM INFORMATION_SCHEMA.GLOBAL_VARIABLES 
+WHERE VARIABLE_NAME IN 
+      ('SLOW_QUERY_LOG','SLOW_QUERY_LOG_FILE','LOG_SLOW_QUERIES','SLOW_QUERY_LOG','LONG_QUERY_TIME')
+EOS
     ds = @sequel[query]
     ds.to_hash(:VARIABLE_NAME,:VARIABLE_VALUE)
+  end
+
+  def start
+    orig_vals = slow_log_values
+    set_global_vars( :long_query_time  => 0, 
+                     :slow_query_log   => @logfile, 
+                     :log_slow_queries => 1, 
+                     :slow_query_log   => 1 )
+    @flush_logs
+    sleep @period
+    set_global_vars( orig_vals )
+    @flush_logs
+  end
+
+  def flush_logs
+    @sequel["FLUSH LOGS"]
+  end
+
+  def set_global_vars ( h )
+    h.each do |k,v|
+      query = "SET GLOBAL #{k} = ?"
+      ds = @sequel[query,v]
+      puts ds.sql
+      ds.update
+    end
   end
 end
 
@@ -30,6 +60,7 @@ options = { :host       => "localhost",
             :interval   => 600,    # sample every :interval seconds
             :period     => 30,     # sample every :period seconds every :interval seconds
             :randomize  => true,   # randomize the :interval time
+            :logfile    => "/tmp/all_queries.log",   # the temporary slow log filename
            }
 
 opts = OptionParser.new

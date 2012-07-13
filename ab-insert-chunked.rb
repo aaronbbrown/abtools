@@ -4,7 +4,7 @@ require 'pp'
 require 'optparse'
 require 'rubygems'
 require 'sequel'
-require 'benchmark'
+require 'logger'
 
 class Hash
   def merge_keys ( keys )
@@ -22,9 +22,11 @@ module ABTools
       @dest_db    = h[:dest_db]
       @dest_tbl   = h[:dest_tbl]
       @chunksize  = h[:chunksize]
+      @logger     = h[:logger] || Logger.new(STDOUT)
 
       params = h.merge_keys([:host,:user,:password,:port,:socket])
       @sequel = Sequel.mysql(params)
+      @sequel.logger = @logger
 
       @pk_col = get_primary_key_column
       throw "No primary key" if @pk_col.empty?
@@ -36,14 +38,12 @@ module ABTools
       query = "SELECT k.column_name FROM information_schema.table_constraints t JOIN information_schema.key_column_usage k USING(constraint_name,table_schema,table_name) WHERE t.constraint_type='PRIMARY KEY' AND t.table_schema=? AND t.table_name=?;"
     
       ds = @sequel[query,@source_db,@source_tbl]
-      puts ds.select_sql
       ds.first[:column_name]
     end
 
     def get_id_bounds
       query = "SELECT min(`#{@pk_col}`) AS min_id, max(`#{@pk_col}`) AS max_id  FROM `#{@source_db}`.`#{@source_tbl}`"
       ds = @sequel[query]
-      puts ds.select_sql
       [ds.first[:min_id],ds.first[:max_id]]
     end
 
@@ -51,13 +51,10 @@ module ABTools
       @last_id = 0
       (@min_id..@max_id).step(@chunksize) do |n|
         endid = [(n+@chunksize-1),@max_id].min
-        bm = Benchmark.measure do 
-          query = "INSERT INTO `#{@dest_db}`.`#{@dest_tbl}` SELECT * FROM `#{@source_db}`.`#{@source_tbl}` WHERE `#{@pk_col}` BETWEEN ? AND ?"
-          ds = @sequel[query,n,endid]
-          puts ds.insert_sql
-          @last_id = ds.insert
-        end
-        puts "Took #{bm.real} seconds - last id inserted #{@last_id}"
+        query = "INSERT INTO `#{@dest_db}`.`#{@dest_tbl}` SELECT * FROM `#{@source_db}`.`#{@source_tbl}` WHERE `#{@pk_col}` BETWEEN ? AND ?"
+        ds = @sequel[query,n,endid]
+        @last_id = ds.insert
+        @logger.info "Last id inserted #{@last_id}"
       end
 
     end
@@ -109,9 +106,12 @@ opts.on("-h", "--help",  "this message") { puts opts; exit 1}
 
 opts.parse!
 pp options
+logger = Logger.new(STDOUT)
+logger.level = Logger::Info
+options[:logger] = logger
 
 sc = ABTools::SQLChunker.new options
-puts "Primary key column: #{sc.pk_col} #{sc.min_id}..#{sc.max_id}"
 
-bm = Benchmark.measure { sc.run }
-puts "DONE: #{bm.real} seconds.  Last inserted ID: #{sc.last_id}"
+logger.info "Primary key column: #{sc.pk_col} #{sc.min_id}..#{sc.max_id}"
+sc.run 
+logger.info "DONE: Last inserted ID: #{sc.last_id}"
