@@ -1,0 +1,30 @@
+GEM
+  remote: http://rubygems.org/
+  specs:
+    active_support (3.0.0)
+      activesupport (= 3.0.0)
+    activesupport (3.0.0)
+    eventmachine (0.12.10)
+    graphite (0.2.0)
+      eventmachine
+      rufus-scheduler
+    mysql (2.8.1)
+    mysql2 (0.3.11)
+    ruby-graphviz (1.0.8)
+    rufus-scheduler (2.0.17)
+      tzinfo (>= 0.3.23)
+    sequel (3.38.0)
+    string_enumerator (0.1.0)
+    tzinfo (0.3.33)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  active_support
+  graphite
+  mysql
+  mysql2
+  ruby-graphviz
+  sequel (>= 3.29.0)
+  string_enumerator
