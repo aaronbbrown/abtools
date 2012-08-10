@@ -22,11 +22,19 @@ module ABTools
       @dest_db    = h[:dest_db]
       @dest_tbl   = h[:dest_tbl]
       @chunksize  = h[:chunksize]
+      @local      = !!h[:local] 
       @logger     = h[:logger] || Logger.new(STDOUT)
 
       params = h.merge_keys([:host,:user,:password,:port,:socket])
       @sequel = Sequel.mysql(params)
       @sequel.logger = @logger
+      if @local
+        @sequel.pool.after_connect = proc do |conn|
+          query = "SET SQL_LOG_BIN=0"
+          @logger.info query
+          conn.query(query)
+        end
+      end
 
       @pk_col = get_primary_key_column
       throw "No primary key" if @pk_col.empty?
@@ -70,6 +78,7 @@ options = { :host       => "localhost",
             :source_db  => nil,
             :dest_tbl   => nil,
             :dest_db    => nil,
+            :local      => false,
             :chunksize  => 10000 }
 
 
@@ -102,12 +111,15 @@ end
 opts.on("-D","--dest-table TABLE", String, "destination table") do |v|
   options[:dest_tbl] = v
 end
+opts.on("-l", "--local", "Don't log to binary log") do |v|
+  options[:local] = v
+end
 opts.on("-h", "--help",  "this message") { puts opts; exit 1}
 
 opts.parse!
-pp options
+
 logger = Logger.new(STDOUT)
-logger.level = Logger::Info
+logger.level = Logger::INFO
 options[:logger] = logger
 
 sc = ABTools::SQLChunker.new options
