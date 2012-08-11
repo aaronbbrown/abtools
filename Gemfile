@@ -1,6 +1,6 @@
 source :rubygems
 
-gem 'sequel', '>=3.29.0'
+gem 'sequel', '>=3.34.0'
 gem 'mysql'
 gem 'mysql2'
 gem 'graphite'
