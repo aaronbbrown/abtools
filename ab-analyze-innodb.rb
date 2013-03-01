@@ -202,7 +202,8 @@ mysql_opts = { :user     => 'root',
                :socket   => '' }
 
 options = { :local   => false,
-            :verbose => false }
+            :verbose => false, 
+            :sleep   => 0 }
 
 opts = OptionParser.new
 opts.banner = "Usage #{$0} [OPTIONS]"
@@ -221,6 +222,10 @@ end
 opts.on("-s", "--socket SOCKET", String,  
     "MySQL socket (default: #{mysql_opts[:socket]})" )  do |v|
   mysql_opts[:socket] = v
+end
+opts.on("-S", "--sleep SECONDS", Integer,
+        "Sleep NUMBER seconds between each table (default: #{options[:sleep]})" ) do |v|
+  options[:sleep] = v
 end
 opts.on("-t", "--tables TABLES", Array, 
     "Comma separated list of db.table to analyze") do |v|
@@ -282,6 +287,12 @@ ds.each do |row|
   result = tbl.unused(12, 5) do
     tbl.analyze options[:local] 
   end
+
+  if options[:sleep] > 0
+    logger.info "Sleeping for #{options[:sleep]} seconds"
+    sleep(options[:sleep]) 
+  end
+
   failed << tbl.formatted_name unless result
 end
 
