@@ -73,11 +73,9 @@ module TableAnalyzer
 #
 # Returns true if the Table is in use, false otherwise
     def in_use?
-      table_in_use_query = <<-SQL
-        SELECT info 
-        FROM INFORMATION_SCHEMA.PROCESSLIST 
-        WHERE DB = ? AND INFO <> 'null'
-      SQL
+      table_in_use_query = "SELECT info" \
+                           " FROM INFORMATION_SCHEMA.PROCESSLIST" \
+                           " WHERE DB = ? AND INFO <> 'null'" 
       @db[table_in_use_query, @schema].each do |row|
         return true if row[:info] =~ /\b`?(#{@schema}\.`?)?`?#{@table}`?\b/i
       end
@@ -94,6 +92,30 @@ module TableAnalyzer
       local_modifier = local ? "LOCAL " : ""
       analyze_query = "ANALYZE #{local_modifier} TABLE #{formatted_name}"
       @db.run analyze_query
+    end
+
+    def get_global_variable ( variable_name )
+      sql = 'SELECT VARIABLE_VALUE' \
+            ' FROM INFORMATION_SCHEMA.GLOBAL_VARIABLES' \
+            ' WHERE VARIABLE_NAME = ?'
+      @db[sql,variable_name].first[:VARIABLE_VALUE]
+    end
+
+    def calc_stats_with_metadata
+      @logger.info "Using metadata to recalculate table statistics"
+      isom = get_global_variable "innodb_stats_on_metadata"
+      unless %w[ON 1].include?(isom.upcase)
+        @db.run "SET GLOBAL innodb_stats_on_metadata = 1"
+      end
+
+      begin
+        @db.run "SHOW INDEXES FROM #{formatted_name}"
+      rescue 
+      ensure
+        unless %w[ON 1].include?(isom.upcase)
+          @db.run "SET GLOBAL innodb_stats_on_metadata = 0"
+        end
+      end
     end
   end
 end
@@ -203,7 +225,8 @@ mysql_opts = { :user     => 'root',
 
 options = { :local   => false,
             :verbose => false, 
-            :sleep   => 0 }
+            :sleep   => 0,
+            :stats_with_metadata => false }
 
 opts = OptionParser.new
 opts.banner = "Usage #{$0} [OPTIONS]"
@@ -234,6 +257,10 @@ end
 opts.on("-l", "--local", 
     "Add LOCAL keyword to ANALYZE TABLE statement (default #{options[:local]})") do |v|
   options[:local] = v
+end
+opts.on("-m", "--metadata", 
+    "Use metadata information to calculate table statistics. Temporarily sets innodb_stats_on_metadata ON. (default #{options[:stats_with_metadata]})") do |v|
+  options[:stats_with_metadata] = v
 end
 opts.on("--defaults-file FILE", String,
     "Specify a my.cnf file that contains user,pass,etc under the [client] header") do |v|
@@ -285,7 +312,12 @@ ds.each do |row|
                                   :db     => db,
                                   :logger => logger)
   result = tbl.unused(12, 5) do
-    tbl.analyze options[:local] 
+    if options[:stats_with_metadata]
+      # use SHOW INDEXES instead
+      tbl.calc_stats_with_metadata
+    else
+      tbl.analyze options[:local] 
+    end
   end
 
   if options[:sleep] > 0
